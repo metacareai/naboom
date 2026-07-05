@@ -1,7 +1,7 @@
 {
   "name": "functions",
   "description": "나봄 - Claude API 프록시 (Cloud Functions)",
-  "engines": { "node": "18" },
+  "engines": { "node": "22" },
   "main": "index.js",
   "scripts": {
     "deploy": "firebase deploy --only functions"

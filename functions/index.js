@@ -1,8 +1,9 @@
 const functions = require('firebase-functions');
 
-// 배포 전 아래 명령으로 API 키를 설정하세요 (Firestore/코드에 키를 직접 넣지 말 것):
-//   firebase functions:config:set anthropic.key="sk-ant-실제키"
-const ANTHROPIC_KEY = functions.config().anthropic && functions.config().anthropic.key;
+// 배포 전 아래 명령으로 API 키를 Secret Manager에 등록하세요 (Firestore/코드에 키를 직접 넣지 말 것):
+//   firebase functions:secrets:set ANTHROPIC_KEY
+const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY;
+const withSecret = { secrets: ['ANTHROPIC_KEY'] }; // 2026-07-05 재배포(시크릿 최신본 반영)
 
 const CTYPE_NAMES = {
   taeyang: '태양인',
@@ -43,6 +44,7 @@ async function callAnthropic(body) {
 }
 
 exports.getGuide = functions
+  .runWith(withSecret)
   .region('asia-northeast3')
   .https.onCall(async (data, context) => {
     if (!ANTHROPIC_KEY) {
@@ -85,6 +87,7 @@ exports.getGuide = functions
   });
 
 exports.diagnose = functions
+  .runWith(withSecret)
   .region('asia-northeast3')
   .https.onCall(async (data, context) => {
     if (!ANTHROPIC_KEY) {
@@ -146,6 +149,7 @@ exports.diagnose = functions
   });
 
 exports.askCoach = functions
+  .runWith(withSecret)
   .region('asia-northeast3')
   .https.onCall(async (data, context) => {
     if (!ANTHROPIC_KEY) {
