@@ -1,7 +1,7 @@
 // ===== Firebase 설정 =====
 // TODO: Firebase 콘솔에서 실제 프로젝트를 만든 뒤 아래 값을 교체하세요.
-// 참고: 이 값들을 채우지 않아도 로그인/설문/체질 진단은 로컬(localStorage)로 정상 동작합니다.
-// AI 맞춤 가이드(Cloud Function 호출)만 실제 Firebase 프로젝트 연결이 필요합니다.
+// 참고: 이 값들을 채우지 않아도 로그인/마이페이지는 로컬(localStorage)로 정상 동작합니다.
+// 체질 진단과 AI 맞춤 가이드(Cloud Function 호출)는 실제 Firebase 프로젝트 연결이 필요합니다.
 var firebaseConfig = {
   apiKey: "REPLACE_WITH_YOUR_FIREBASE_API_KEY",
   authDomain: "REPLACE_WITH_YOUR_PROJECT.firebaseapp.com",
@@ -14,12 +14,14 @@ var firebaseConfig = {
 var _fbReady = false;
 var db = null;
 var getGuideFn = null;
+var diagnoseFn = null;
 var _authUid = null;
 try {
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
   // functions/index.js 배포 리전과 반드시 일치시킬 것
   getGuideFn = firebase.app().functions('asia-northeast3').httpsCallable('getGuide');
+  diagnoseFn = firebase.app().functions('asia-northeast3').httpsCallable('diagnose');
   _fbReady = true;
   // 익명 인증: Firestore 보안 규칙에서 request.auth.uid로 사용자별 데이터를 분리하기 위함
   firebase.auth().signInAnonymously().then(function (cred) {
@@ -50,75 +52,23 @@ var CTYPES = {
 };
 var CTYPE_ORDER = ['taeyang', 'taeeum', 'soyang', 'soeum'];
 
-// ===== 설문 문항 =====
-var SURVEY = [
-  { q: '체형은 어떤 편인가요?', opts: [
-    { t: 'taeyang', label: '목이 굵고 가슴 윗부분이 발달, 허리 아래는 약한 편' },
-    { t: 'taeeum', label: '골격이 크고 튼튼하며 살이 잘 찌는 편' },
-    { t: 'soyang', label: '가슴과 어깨가 발달하고 엉덩이 쪽은 빈약한 편' },
-    { t: 'soeum', label: '체구가 아담하고 상체보다 하체가 발달한 편' }
-  ]},
-  { q: '평소 성격에 가장 가까운 것은?', opts: [
-    { t: 'taeyang', label: '진취적이고 독창적이며 남 앞에 나서는 걸 좋아함' },
-    { t: 'taeeum', label: '느긋하고 참을성이 많으며 신중한 편' },
-    { t: 'soyang', label: '활발하고 사교적이며 일 처리가 빠른 편' },
-    { t: 'soeum', label: '차분하고 꼼꼼하며 계획적인 편' }
-  ]},
-  { q: '더위와 추위 중 어느 쪽에 더 예민한가요?', opts: [
-    { t: 'taeyang', label: '특별히 예민하진 않지만 목이 쉽게 피로해짐' },
-    { t: 'taeeum', label: '더위에 약하고 땀을 많이 흘리는 편' },
-    { t: 'soyang', label: '몸에 열이 많아 더위를 잘 타는 편' },
-    { t: 'soeum', label: '손발이 차고 추위에 약한 편' }
-  ]},
-  { q: '소화 기능은 어떤 편인가요?', opts: [
-    { t: 'taeyang', label: '대체로 무난하지만 과음·과로하면 탈이 남' },
-    { t: 'taeeum', label: '소화력이 좋고 대체로 잘 먹는 편' },
-    { t: 'soyang', label: '소화가 빠르고 배가 자주 고픈 편' },
-    { t: 'soeum', label: '소화가 더디고 조금만 먹어도 부담스러운 편' }
-  ]},
-  { q: '땀에 대해 어떻게 느끼나요?', opts: [
-    { t: 'taeyang', label: '땀을 많이 흘리면 오히려 몸이 무거워짐' },
-    { t: 'taeeum', label: '땀을 흘리고 나면 몸이 개운해짐' },
-    { t: 'soyang', label: '땀은 적당히 나는 편, 크게 신경 안 씀' },
-    { t: 'soeum', label: '땀이 적은 편이고 땀나면 기운이 빠짐' }
-  ]},
-  { q: '목소리나 말투는 어떤 편인가요?', opts: [
-    { t: 'taeyang', label: '목소리가 크고 울림이 있는 편' },
-    { t: 'taeeum', label: '말이 느리고 신중한 편' },
-    { t: 'soyang', label: '말이 빠르고 시원시원한 편' },
-    { t: 'soeum', label: '목소리가 작고 조곤조곤한 편' }
-  ]},
-  { q: '화가 날 때 반응에 가까운 것은?', opts: [
-    { t: 'taeyang', label: '욱하지만 금방 풀리고 뒤끝은 적은 편' },
-    { t: 'taeeum', label: '웬만해서는 화를 잘 안 내는 편' },
-    { t: 'soyang', label: '화가 나면 바로 표현하는 편' },
-    { t: 'soeum', label: '겉으로 잘 드러내지 않고 속으로 삭이는 편' }
-  ]},
-  { q: '평소 대변 상태는 어떤가요?', opts: [
-    { t: 'taeyang', label: '무난한 편, 특별한 불편은 없음' },
-    { t: 'taeeum', label: '변비 경향이 있는 편' },
-    { t: 'soyang', label: '대변이 시원하게 잘 나오는 편' },
-    { t: 'soeum', label: '무르거나 자주 변하는 편' }
-  ]},
-  { q: '처음 만난 사람과의 관계는?', opts: [
-    { t: 'taeyang', label: '리더십을 발휘하며 주도하는 편' },
-    { t: 'taeeum', label: '서두르지 않고 천천히 친해지는 편' },
-    { t: 'soyang', label: '금방 친해지고 분위기를 주도하는 편' },
-    { t: 'soeum', label: '낯을 가리지만 한번 친해지면 깊게 챙기는 편' }
-  ]},
-  { q: '평소 체력과 지구력은 어떤가요?', opts: [
-    { t: 'taeyang', label: '순발력은 좋으나 지구력은 약한 편' },
-    { t: 'taeeum', label: '지구력이 좋고 웬만해선 잘 지치지 않는 편' },
-    { t: 'soyang', label: '활동적이지만 쉽게 지치는 편' },
-    { t: 'soeum', label: '기초 체력이 약하고 쉽게 피로한 편' }
-  ]}
+// ===== 빠른 신호 칩 (탭하면 소개글에 문장 추가) =====
+var CHIPS = [
+  { label: '손발이 차요', text: '손발이 찬 편이에요.' },
+  { label: '더위를 많이 타요', text: '더위를 많이 타는 편이에요.' },
+  { label: '땀이 많아요', text: '땀이 많은 편이에요.' },
+  { label: '땀이 적어요', text: '땀이 적은 편이에요.' },
+  { label: '소화가 잘 안돼요', text: '소화가 잘 안 되는 편이에요.' },
+  { label: '소화가 잘돼요', text: '소화가 잘 되고 잘 먹는 편이에요.' },
+  { label: '변비가 있어요', text: '변비 경향이 있어요.' },
+  { label: '대변이 무른 편이에요', text: '대변이 무르거나 자주 변하는 편이에요.' }
 ];
 
 // ===== 상태 =====
 var USER = null;      // 현재 로그인 사용자 (localStorage 기준)
-var _surveyIdx = 0;
-var _surveyScores = { taeyang: 0, taeeum: 0, soyang: 0, soeum: 0 };
 var _pendingCheckup = null;
+var _photoBase64 = null;
+var _photoMediaType = null;
 
 // ===== 로컬 저장소 =====
 function loadUsers() {
@@ -154,12 +104,16 @@ function showScreen(id) {
 document.getElementById('btn-login').addEventListener('click', function () {
   var name = document.getElementById('in-name').value.trim();
   var birth = document.getElementById('in-birth').value.trim();
+  var gender = document.getElementById('in-gender').value;
   if (!name) { alert('이름을 입력해주세요.'); return; }
   if (!birth || isNaN(Number(birth))) { alert('태어난 연도를 숫자로 입력해주세요.'); return; }
 
   var user = findUser(name, birth);
   if (!user) {
-    user = { id: uid(), name: name, birthYear: birth, ctype: null, survey: null, guides: [] };
+    user = { id: uid(), name: name, birthYear: birth, gender: gender, ctype: null, survey: null, guides: [] };
+    upsertUser(user);
+  } else if (gender && user.gender !== gender) {
+    user.gender = gender;
     upsertUser(user);
   }
   USER = user;
@@ -237,56 +191,120 @@ document.getElementById('btn-result-to-checkup').addEventListener('click', funct
 document.getElementById('btn-guide-to-home').addEventListener('click', function () { renderHome(); showScreen('scr-home'); });
 document.getElementById('btn-guide-error-home').addEventListener('click', function () { renderHome(); showScreen('scr-home'); });
 document.getElementById('btn-guide-retry').addEventListener('click', function () { requestGuide(_pendingCheckup); });
+document.getElementById('btn-diagnose-submit').addEventListener('click', submitDiagnosis);
+document.getElementById('btn-survey-retry').addEventListener('click', submitDiagnosis);
+document.getElementById('btn-photo-remove').addEventListener('click', clearPhoto);
+document.getElementById('in-photo').addEventListener('change', onPhotoSelected);
 
-// ===== 설문 =====
+// ===== 체질 진단 =====
 function startSurvey() {
-  _surveyIdx = 0;
-  _surveyScores = { taeyang: 0, taeeum: 0, soyang: 0, soeum: 0 };
+  document.getElementById('in-description').value = '';
+  document.getElementById('in-illness').value = '';
+  clearPhoto();
+  renderChips();
+  document.getElementById('survey-form-card').classList.remove('hidden');
+  document.getElementById('survey-loading').classList.add('hidden');
+  document.getElementById('survey-error').classList.add('hidden');
   showScreen('scr-survey');
-  renderSurveyQuestion();
 }
 
-function renderSurveyQuestion() {
-  var item = SURVEY[_surveyIdx];
-  document.getElementById('survey-qnum').textContent = (_surveyIdx + 1) + ' / ' + SURVEY.length;
-  document.getElementById('survey-question').textContent = item.q;
-  document.getElementById('survey-progress').style.width = Math.round((_surveyIdx / SURVEY.length) * 100) + '%';
-
-  var optsEl = document.getElementById('survey-options');
-  optsEl.innerHTML = '';
-  item.opts.forEach(function (opt) {
-    var div = document.createElement('div');
-    div.className = 'q-option';
-    div.textContent = opt.label;
-    div.addEventListener('click', function () { answerSurvey(opt.t); });
-    optsEl.appendChild(div);
+function renderChips() {
+  var el = document.getElementById('signal-chips');
+  el.innerHTML = '';
+  CHIPS.forEach(function (chip) {
+    var span = document.createElement('span');
+    span.className = 'chip';
+    span.textContent = chip.label;
+    span.addEventListener('click', function () {
+      span.classList.toggle('active');
+      var ta = document.getElementById('in-description');
+      if (span.classList.contains('active')) {
+        ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '') + chip.text;
+      } else {
+        ta.value = ta.value.split(chip.text).join('').replace(/\s+/g, ' ').trim();
+      }
+    });
+    el.appendChild(span);
   });
 }
 
-function answerSurvey(type) {
-  _surveyScores[type]++;
-  _surveyIdx++;
-  if (_surveyIdx >= SURVEY.length) {
-    finishSurvey();
-  } else {
-    renderSurveyQuestion();
-  }
+function onPhotoSelected(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    var dataUrl = reader.result; // data:image/jpeg;base64,....
+    var parts = dataUrl.split(',');
+    _photoMediaType = parts[0].match(/data:(.*);base64/)[1];
+    _photoBase64 = parts[1];
+    document.getElementById('photo-preview-img').src = dataUrl;
+    document.getElementById('photo-preview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
 }
 
-function finishSurvey() {
-  document.getElementById('survey-progress').style.width = '100%';
-  var best = CTYPE_ORDER[0];
-  CTYPE_ORDER.forEach(function (t) { if (_surveyScores[t] > _surveyScores[best]) best = t; });
+function clearPhoto() {
+  _photoBase64 = null;
+  _photoMediaType = null;
+  document.getElementById('in-photo').value = '';
+  document.getElementById('photo-preview-img').src = '';
+  document.getElementById('photo-preview').classList.add('hidden');
+}
 
-  USER.ctype = best;
-  USER.survey = { scores: _surveyScores, answeredAt: Date.now() };
-  upsertUser(USER);
-  syncUserToFirestore();
+function submitDiagnosis() {
+  var description = document.getElementById('in-description').value.trim();
+  var illness = document.getElementById('in-illness').value.trim();
+  if (!description) { alert('나를 소개하는 글을 입력해주세요.'); return; }
 
-  var ct = CTYPES[best];
+  document.getElementById('survey-form-card').classList.add('hidden');
+  document.getElementById('survey-error').classList.add('hidden');
+  document.getElementById('survey-loading').classList.remove('hidden');
+
+  if (!diagnoseFn) {
+    document.getElementById('survey-loading').classList.add('hidden');
+    document.getElementById('survey-error').classList.remove('hidden');
+    return;
+  }
+
+  diagnoseFn({
+    gender: USER.gender || '',
+    birthYear: USER.birthYear,
+    description: description,
+    illness: illness,
+    photoBase64: _photoBase64,
+    photoMediaType: _photoMediaType
+  }).then(function (res) {
+    var ctype = res.data && res.data.ctype;
+    var reasoning = (res.data && res.data.reasoning) || '';
+    if (!CTYPES[ctype]) {
+      document.getElementById('survey-loading').classList.add('hidden');
+      document.getElementById('survey-error').classList.remove('hidden');
+      return;
+    }
+    USER.ctype = ctype;
+    USER.survey = {
+      description: description,
+      illness: illness,
+      hasPhoto: !!_photoBase64,
+      reasoning: reasoning,
+      diagnosedAt: Date.now()
+    };
+    upsertUser(USER);
+    syncUserToFirestore();
+    showDiagnosisResult(ctype, reasoning);
+  }).catch(function (err) {
+    console.warn('진단 요청 실패', err);
+    document.getElementById('survey-loading').classList.add('hidden');
+    document.getElementById('survey-error').classList.remove('hidden');
+  });
+}
+
+function showDiagnosisResult(ctype, reasoning) {
+  var ct = CTYPES[ctype];
   document.getElementById('result-ctype-badge').textContent = ct.name;
   document.getElementById('result-ctype-name').textContent = ct.name;
   document.getElementById('result-ctype-desc').textContent = ct.desc;
+  document.getElementById('result-ai-reason').textContent = reasoning;
   showScreen('scr-result');
 }
 
@@ -350,9 +368,11 @@ function onGuideError() {
 }
 
 // ===== 마이페이지 =====
+var GENDER_LABEL = { male: '남성', female: '여성' };
 function renderMypage() {
   document.getElementById('my-name').textContent = USER.name;
   document.getElementById('my-birth').textContent = USER.birthYear;
+  document.getElementById('my-gender').textContent = GENDER_LABEL[USER.gender] || '선택 안 함';
   document.getElementById('my-ctype').textContent = USER.ctype ? CTYPES[USER.ctype].name : '진단 전';
   renderGuideList('mypage-guide-list');
 }
@@ -365,6 +385,7 @@ function syncUserToFirestore() {
     db.collection('users').doc(_authUid).set({
       name: USER.name,
       birthYear: USER.birthYear,
+      gender: USER.gender || '',
       ctype: USER.ctype,
       survey: USER.survey,
       updatedAt: Date.now()

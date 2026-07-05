@@ -213,6 +213,54 @@ textarea { resize: vertical; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.chip {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  background: #fafaf7;
+  cursor: pointer;
+  color: var(--text-sub);
+}
+.chip.active {
+  background: var(--green-light);
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 700;
+}
+
+input[type="file"] {
+  padding: 10px;
+  font-size: 13px;
+}
+
+.photo-preview {
+  margin-top: 10px;
+  text-align: center;
+}
+.photo-preview img {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  background: #fafaf7;
+}
+
 .myinfo-row {
   display: flex;
   justify-content: space-between;

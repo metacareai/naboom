@@ -20,6 +20,12 @@
       <input type="text" id="in-name" placeholder="이름을 입력하세요">
       <label>태어난 연도</label>
       <input type="number" id="in-birth" placeholder="예: 1975">
+      <label>성별</label>
+      <select id="in-gender">
+        <option value="">선택 안 함</option>
+        <option value="male">남성</option>
+        <option value="female">여성</option>
+      </select>
       <button class="btn-primary" id="btn-login">시작하기</button>
       <p class="hint">이름과 태어난 연도로 나만의 기록을 이어갈 수 있어요.</p>
     </div>
@@ -35,39 +41,63 @@
   <div class="content">
     <div id="home-no-survey" class="card hidden">
       <h2>아직 체질 진단 전이에요</h2>
-      <p>간단한 설문으로 나의 체질 경향을 살펴보세요.</p>
-      <button class="btn-primary" id="btn-start-survey">설문 시작하기</button>
+      <p>나를 간단히 소개하면 AI가 체질 경향을 살펴봐요.</p>
+      <button class="btn-primary" id="btn-start-survey">체질 진단받기</button>
     </div>
     <div id="home-has-survey" class="card hidden">
       <h2>내 체질 경향</h2>
       <div class="ctype-badge" id="home-ctype-badge">-</div>
       <p id="home-ctype-desc"></p>
       <button class="btn-primary" id="btn-go-checkup">검진 결과로 맞춤 가이드 받기</button>
-      <button class="btn-secondary" id="btn-resurvey">설문 다시하기</button>
+      <button class="btn-secondary" id="btn-resurvey">진단 다시받기</button>
     </div>
     <div class="section-title">최근 가이드</div>
     <div id="home-guide-list" class="guide-list"></div>
   </div>
 </div>
 
-<!-- 설문 -->
+<!-- 체질 진단 입력 -->
 <div id="scr-survey" class="screen">
   <header class="topbar">
     <button class="icon-btn" id="btn-survey-back">닫기</button>
-    <span class="topbar-title">체질 설문</span>
+    <span class="topbar-title">체질 진단</span>
     <span></span>
   </header>
   <div class="content">
-    <div class="progress-bar"><div class="progress-fill" id="survey-progress"></div></div>
-    <div class="card">
-      <div id="survey-qnum" class="q-num"></div>
-      <div id="survey-question" class="q-text"></div>
-      <div id="survey-options" class="q-options"></div>
+    <div id="survey-form-card" class="card">
+      <p class="hint">해당하는 특징을 눌러 아래 소개글에 문장을 더할 수 있어요.</p>
+      <div class="chip-group" id="signal-chips"></div>
+
+      <label>나를 소개해주세요</label>
+      <textarea id="in-description" rows="5" placeholder="예: 허약체질에 감기도 잘 걸리고 알러지도 있어요. 성격은 꼼꼼하고 신중한 편이에요."></textarea>
+
+      <label>현재 앓고 있는 지병이나 복용 중인 약이 있나요?</label>
+      <textarea id="in-illness" rows="2" placeholder="예: 없음 / 고혈압약 복용중"></textarea>
+
+      <label>체형·얼굴 사진 (선택)</label>
+      <p class="hint">사진을 올리면 AI가 체형과 인상을 함께 참고해 더 정확하게 진단해요. 사진은 진단에만 사용되고 저장되지 않아요.</p>
+      <input type="file" id="in-photo" accept="image/*" capture="environment">
+      <div id="photo-preview" class="photo-preview hidden">
+        <img id="photo-preview-img" src="" alt="업로드한 사진 미리보기">
+        <button class="btn-secondary" id="btn-photo-remove">사진 삭제</button>
+      </div>
+
+      <button class="btn-primary" id="btn-diagnose-submit">체질 진단받기</button>
+    </div>
+
+    <div id="survey-loading" class="card center hidden">
+      <div class="spinner"></div>
+      <p>소개해주신 내용을 바탕으로 체질을 살펴보고 있어요...</p>
+    </div>
+
+    <div id="survey-error" class="card hidden">
+      <p>진단을 불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>
+      <button class="btn-secondary" id="btn-survey-retry">다시 시도</button>
     </div>
   </div>
 </div>
 
-<!-- 설문 결과 -->
+<!-- 진단 결과 -->
 <div id="scr-result" class="screen">
   <header class="topbar">
     <span></span>
@@ -79,7 +109,8 @@
       <div class="ctype-badge big" id="result-ctype-badge">-</div>
       <h2 id="result-ctype-name"></h2>
       <p id="result-ctype-desc"></p>
-      <div class="disclaimer">이 결과는 전통 체질 설문을 바탕으로 한 참고용 경향 분석이며, 의학적 진단이 아닙니다.</div>
+      <div id="result-ai-reason" class="guide-text"></div>
+      <div class="disclaimer">이 결과는 AI가 소개글·사진을 참고해 분석한 체질 경향이며, 의학적 진단이 아닙니다.</div>
       <button class="btn-primary" id="btn-result-to-checkup">검진 결과로 맞춤 가이드 받기</button>
       <button class="btn-secondary" id="btn-result-to-home">나중에 할게요</button>
     </div>
@@ -151,6 +182,7 @@
     <div class="card">
       <div class="myinfo-row"><span>이름</span><span id="my-name"></span></div>
       <div class="myinfo-row"><span>태어난 연도</span><span id="my-birth"></span></div>
+      <div class="myinfo-row"><span>성별</span><span id="my-gender"></span></div>
       <div class="myinfo-row"><span>내 체질</span><span id="my-ctype"></span></div>
     </div>
     <div class="section-title">가이드 기록</div>
