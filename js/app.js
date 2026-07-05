@@ -15,6 +15,7 @@ var _fbReady = false;
 var db = null;
 var getGuideFn = null;
 var diagnoseFn = null;
+var askCoachFn = null;
 var _authUid = null;
 try {
   firebase.initializeApp(firebaseConfig);
@@ -22,6 +23,7 @@ try {
   // functions/index.js 배포 리전과 반드시 일치시킬 것
   getGuideFn = firebase.app().functions('asia-northeast3').httpsCallable('getGuide');
   diagnoseFn = firebase.app().functions('asia-northeast3').httpsCallable('diagnose');
+  askCoachFn = firebase.app().functions('asia-northeast3').httpsCallable('askCoach');
   _fbReady = true;
   // 익명 인증: Firestore 보안 규칙에서 request.auth.uid로 사용자별 데이터를 분리하기 위함
   firebase.auth().signInAnonymously().then(function (cred) {
@@ -51,6 +53,48 @@ var CTYPES = {
   }
 };
 var CTYPE_ORDER = ['taeyang', 'taeeum', 'soyang', 'soeum'];
+
+// ===== 주간 체질 가이드 콘텐츠 뱅크 (AI 호출 없이 로테이션, 매주 갱신) =====
+var WEEKLY_TIPS = {
+  taeyang: [
+    { title: '간을 아끼는 한 주', body: '과음·과로를 피하고 담백한 채소·해산물 위주로 드세요. 무리한 승부욕보다 여유를 가지면 몸이 더 편해요.' },
+    { title: '목 건강 챙기기', body: '목이 쉽게 피로해지는 편이니 말을 많이 한 날은 따뜻한 물과 배·도라지 같은 음식으로 목을 달래주세요.' },
+    { title: '메밀과 잘 맞아요', body: '태양인에게는 메밀, 순채나물, 조개류처럼 서늘하고 담백한 음식이 잘 맞아요. 이번 주 한 끼는 메밀국수 어떠세요?' },
+    { title: '과음 주의보', body: '회식이 있는 주라면 평소보다 술을 줄여보세요. 간이 약한 편이라 다음날 회복이 더딜 수 있어요.' },
+    { title: '가벼운 유산소', body: '격렬한 운동보다 산책이나 가벼운 조깅처럼 꾸준히 할 수 있는 운동이 잘 맞아요.' },
+    { title: '여유 있는 마음', body: '급하게 몰아붙이기보다 이번 주는 한 박자 쉬어가는 걸 목표로 삼아보세요.' }
+  ],
+  taeeum: [
+    { title: '체중 관리 습관', body: '살이 찌기 쉬운 편이니 이번 주는 과식 한 끼만 줄여봐도 충분해요.' },
+    { title: '땀 내는 운동', body: '태음인은 땀을 흘리고 나면 몸이 개운해지는 편이에요. 이번 주 20분 이상 걷기 어떠세요?' },
+    { title: '콩과 채소', body: '콩류, 무, 다시마처럼 담백한 음식이 잘 맞아요. 기름진 음식은 조금만 줄여도 몸이 가벼워져요.' },
+    { title: '느긋함이 강점', body: '끈기 있고 참을성이 많은 편이라, 이번 주는 급한 다이어트보다 천천히 오래 갈 습관 하나만 만들어보세요.' },
+    { title: '변비엔 이렇게', body: '변비 경향이 있다면 아침에 미지근한 물 한 잔과 섬유질 채소를 챙겨보세요.' },
+    { title: '야식 줄이기', body: '저녁 늦은 시간의 야식이 특히 안 맞는 편이에요. 이번 주는 저녁 8시 이후엔 물만 드셔보는 건 어떨까요?' }
+  ],
+  soyang: [
+    { title: '열을 식히는 음식', body: '몸에 열이 많은 편이니 맵고 자극적인 음식보다 오이, 배, 수박처럼 시원한 음식이 잘 맞아요.' },
+    { title: '감정 다스리기', body: '화가 났을 때 바로 표현하는 편인데, 이번 주는 한 박자 쉬고 말해보는 연습을 해보세요.' },
+    { title: '숙면 챙기기', body: '활동적인 만큼 밤에 흥분 상태가 이어질 수 있어요. 자기 전 스마트폰을 줄이고 일찍 눕는 습관을 만들어보세요.' },
+    { title: '튀김 줄이기', body: '기름지고 자극적인 음식은 몸의 열을 더 올릴 수 있어요. 이번 주 한 끼는 담백하게 먹어보세요.' },
+    { title: '한 박자 쉬고 결정하기', body: '급하게 결정하기보다 하루 정도 묵혀두고 판단하는 습관이 도움이 돼요.' },
+    { title: '수분 보충', body: '땀과 활동량이 많은 편이라 물을 평소보다 조금 더 챙겨 드세요.' }
+  ],
+  soeum: [
+    { title: '따뜻한 음식이 좋아요', body: '소화 기능이 약한 편이라 찬 음식보다 따뜻한 국물, 생강차 같은 게 잘 맞아요.' },
+    { title: '소식 습관', body: '한 번에 많이 먹기보다 조금씩 자주 먹는 게 소화에 더 도움이 돼요.' },
+    { title: '손발 따뜻하게', body: '손발이 찬 편이라면 이번 주는 반신욕이나 따뜻한 양말로 몸을 데워보세요.' },
+    { title: '무리하지 않기', body: '기초 체력이 약한 편이니 이번 주는 평소보다 30분 일찍 잠자리에 들어보는 건 어떨까요?' },
+    { title: '찬 음료 줄이기', body: '얼음이 많이 든 음료는 소화에 부담을 줄 수 있어요. 미지근한 물로 바꿔보세요.' },
+    { title: '규칙적인 식사시간', body: '불규칙한 식사가 특히 안 맞는 편이라, 이번 주는 식사 시간을 일정하게 맞춰보세요.' }
+  ]
+};
+function getWeekIndex() { return Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000)); }
+function getWeeklyTip(ctype) {
+  var tips = WEEKLY_TIPS[ctype];
+  if (!tips || !tips.length) return null;
+  return tips[getWeekIndex() % tips.length];
+}
 
 // ===== 빠른 신호 칩 (탭하면 소개글에 문장 추가) =====
 var CHIPS = [
@@ -110,7 +154,7 @@ document.getElementById('btn-login').addEventListener('click', function () {
 
   var user = findUser(name, birth);
   if (!user) {
-    user = { id: uid(), name: name, birthYear: birth, gender: gender, ctype: null, survey: null, guides: [] };
+    user = { id: uid(), name: name, birthYear: birth, gender: gender, ctype: null, survey: null, guides: [], lastCheckup: null, chatLog: [], chatToday: null };
     upsertUser(user);
   } else if (gender && user.gender !== gender) {
     user.gender = gender;
@@ -147,15 +191,26 @@ document.getElementById('btn-logout').addEventListener('click', function () {
 function renderHome() {
   var noSurvey = document.getElementById('home-no-survey');
   var hasSurvey = document.getElementById('home-has-survey');
+  var weeklyCard = document.getElementById('home-weekly-card');
   if (!USER.ctype) {
     noSurvey.classList.remove('hidden');
     hasSurvey.classList.add('hidden');
+    weeklyCard.classList.add('hidden');
   } else {
     noSurvey.classList.add('hidden');
     hasSurvey.classList.remove('hidden');
     var ct = CTYPES[USER.ctype];
     document.getElementById('home-ctype-badge').textContent = ct.name;
     document.getElementById('home-ctype-desc').textContent = ct.desc;
+
+    var tip = getWeeklyTip(USER.ctype);
+    if (tip) {
+      weeklyCard.classList.remove('hidden');
+      document.getElementById('home-weekly-title').textContent = '이번 주 가이드: ' + tip.title;
+      document.getElementById('home-weekly-preview').textContent = tip.body;
+    } else {
+      weeklyCard.classList.add('hidden');
+    }
   }
   renderGuideList('home-guide-list');
 }
@@ -198,6 +253,12 @@ document.getElementById('btn-result-refine').addEventListener('click', startRefi
 document.getElementById('btn-guide-add-ctype').addEventListener('click', function () {
   _returnToGuideAfterDiagnosis = true;
   startSurvey();
+});
+document.getElementById('btn-go-weekly').addEventListener('click', openWeekly);
+document.getElementById('btn-weekly-back').addEventListener('click', function () { renderHome(); showScreen('scr-home'); });
+document.getElementById('btn-chat-send').addEventListener('click', sendChatMessage);
+document.getElementById('chat-input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); }
 });
 
 function openCheckup() {
@@ -361,6 +422,7 @@ function requestGuide(checkup) {
     var guide = { id: uid(), createdAt: Date.now(), checkup: checkup, text: text };
     USER.guides = USER.guides || [];
     USER.guides.push(guide);
+    USER.lastCheckup = checkup;
     upsertUser(USER);
     syncGuideToFirestore(guide);
     showGuideResult(text);
@@ -394,6 +456,104 @@ function onGuideError() {
   document.getElementById('guide-error').classList.remove('hidden');
 }
 
+// ===== 주간 가이드 + AI 코치 채팅 =====
+var CHAT_DAILY_LIMIT = 3;
+
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+function getTodayChatCount() {
+  if (!USER.chatToday || USER.chatToday.date !== todayStr()) return 0;
+  return USER.chatToday.count || 0;
+}
+
+function openWeekly() {
+  var tip = getWeeklyTip(USER.ctype);
+  document.getElementById('weekly-ctype-badge').textContent = CTYPES[USER.ctype].name;
+  document.getElementById('weekly-tip-title').textContent = tip ? tip.title : '';
+  document.getElementById('weekly-tip-body').textContent = tip ? tip.body : '';
+  renderChatLog();
+  updateChatLimitUI();
+  showScreen('scr-weekly');
+}
+
+function renderChatLog() {
+  var el = document.getElementById('chat-log');
+  el.innerHTML = '';
+  var log = (USER.chatLog || []).slice(-12);
+  log.forEach(function (m) {
+    var div = document.createElement('div');
+    div.className = 'chat-msg ' + (m.role === 'user' ? 'user' : 'assistant');
+    div.textContent = m.text;
+    el.appendChild(div);
+  });
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateChatLimitUI() {
+  var count = getTodayChatCount();
+  var row = document.getElementById('chat-input-row');
+  var note = document.getElementById('chat-limit-note');
+  if (count >= CHAT_DAILY_LIMIT) {
+    row.classList.add('hidden');
+    note.textContent = '오늘 대화는 여기까지예요. 매일 조금씩 이야기 나누면서 당신을 더 잘 알아갈게요 :) 내일 또 와주세요.';
+    note.classList.remove('hidden');
+  } else {
+    row.classList.remove('hidden');
+    note.textContent = '오늘 ' + count + '/' + CHAT_DAILY_LIMIT + '번 대화했어요.';
+    note.classList.remove('hidden');
+  }
+}
+
+function sendChatMessage() {
+  var input = document.getElementById('chat-input');
+  var message = input.value.trim();
+  if (!message) return;
+  if (getTodayChatCount() >= CHAT_DAILY_LIMIT) { updateChatLimitUI(); return; }
+
+  input.value = '';
+  USER.chatLog = USER.chatLog || [];
+  USER.chatLog.push({ role: 'user', text: message, ts: Date.now() });
+  renderChatLog();
+
+  if (!askCoachFn) {
+    USER.chatLog.push({ role: 'assistant', text: '지금은 코치에게 물어볼 수 없어요. 잠시 후 다시 시도해주세요.', ts: Date.now() });
+    renderChatLog();
+    return;
+  }
+
+  var history = USER.chatLog.slice(0, -1).slice(-6);
+
+  askCoachFn({
+    ctype: USER.ctype || null,
+    ctypeName: USER.ctype ? CTYPES[USER.ctype].name : null,
+    checkup: USER.lastCheckup || null,
+    illness: (USER.survey && USER.survey.illness) || '',
+    history: history,
+    message: message
+  }).then(function (res) {
+    var reply = (res.data && res.data.text) || '답변을 가져오지 못했어요.';
+    USER.chatLog.push({ role: 'assistant', text: reply, ts: Date.now() });
+    if (USER.chatLog.length > 40) USER.chatLog = USER.chatLog.slice(-40);
+
+    var today = todayStr();
+    if (!USER.chatToday || USER.chatToday.date !== today) USER.chatToday = { date: today, count: 0 };
+    USER.chatToday.count++;
+
+    upsertUser(USER);
+    syncUserToFirestore();
+    renderChatLog();
+    updateChatLimitUI();
+  }).catch(function (err) {
+    console.warn('코치 채팅 실패', err);
+    USER.chatLog.push({ role: 'assistant', text: '답변을 가져오지 못했어요. 잠시 후 다시 시도해주세요.', ts: Date.now() });
+    upsertUser(USER);
+    renderChatLog();
+  });
+}
+
 // ===== 마이페이지 =====
 var GENDER_LABEL = { male: '남성', female: '여성' };
 function renderMypage() {
@@ -415,6 +575,9 @@ function syncUserToFirestore() {
       gender: USER.gender || '',
       ctype: USER.ctype,
       survey: USER.survey,
+      lastCheckup: USER.lastCheckup || null,
+      chatLog: USER.chatLog || [],
+      chatToday: USER.chatToday || null,
       updatedAt: Date.now()
     }, { merge: true }).catch(function (e) { console.warn('Firestore 사용자 동기화 실패', e); });
   } catch (e) { console.warn('Firestore 사용자 동기화 실패', e); }

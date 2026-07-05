@@ -144,3 +144,55 @@ exports.diagnose = functions
       throw new functions.https.HttpsError('internal', 'AI 진단 중 오류가 발생했습니다.');
     }
   });
+
+exports.askCoach = functions
+  .region('asia-northeast3')
+  .https.onCall(async (data, context) => {
+    if (!ANTHROPIC_KEY) {
+      throw new functions.https.HttpsError('failed-precondition', 'Anthropic API 키가 설정되지 않았습니다.');
+    }
+
+    const message = data && data.message;
+    if (!message || !String(message).trim()) {
+      throw new functions.https.HttpsError('invalid-argument', '메시지가 비어 있습니다.');
+    }
+    const ctype = data && data.ctype;
+    const checkup = (data && data.checkup) || {};
+    const illness = (data && data.illness) || '';
+    const history = Array.isArray(data && data.history) ? data.history.slice(-6) : [];
+
+    var contextLines = [];
+    if (ctype && CTYPE_NAMES[ctype]) contextLines.push('사용자 체질: ' + CTYPE_NAMES[ctype]);
+    var checkupInfo = buildPrompt(null, checkup);
+    if (checkupInfo) contextLines.push('최근 검진 수치:\n' + checkupInfo);
+    if (illness) contextLines.push('지병/복용약: ' + illness);
+
+    const system = '당신은 나봄 앱의 건강 코치입니다. 아래는 이 사용자에 대해 미리 알고 있는 정보입니다:\n' +
+      (contextLines.join('\n') || '아직 알려진 정보가 없습니다.') + '\n\n' +
+      '사용자는 의료인이 아니며, 이 앱은 의료 행위를 하지 않습니다. ' +
+      '반드시 "추천", "가이드", "도움" 같은 표현만 쓰고 "처방", "치료", "진단" 같은 표현은 쓰지 마세요. ' +
+      '위 정보를 참고해서 사용자의 질문에 짧고 친근한 대화체로 2~4문장 안에 답하세요. ' +
+      '답변에 도움이 될 만한 정보가 부족하면, 답변 끝에 자연스러운 되물음을 딱 하나만 덧붙여도 됩니다 (여러 개 묻지 마세요). ' +
+      '건강 이상이 의심되면 병원 진료를 권하는 문장을 포함하세요.';
+
+    const messages = history
+      .filter(function (m) { return m && m.role && m.text; })
+      .map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.text) }; });
+    messages.push({ role: 'user', content: String(message) });
+
+    const body = {
+      model: 'claude-haiku-4-5',
+      max_tokens: 400,
+      system: system,
+      messages: messages
+    };
+
+    try {
+      const text = await callAnthropic(body);
+      return { text: text };
+    } catch (e) {
+      console.error('askCoach 처리 오류', e);
+      if (e instanceof functions.https.HttpsError) throw e;
+      throw new functions.https.HttpsError('internal', 'AI 응답 생성 중 오류가 발생했습니다.');
+    }
+  });

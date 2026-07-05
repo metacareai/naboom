@@ -56,8 +56,41 @@
       <p id="home-ctype-desc"></p>
       <button class="btn-secondary" id="btn-resurvey">진단 다시받기</button>
     </div>
+
+    <div id="home-weekly-card" class="card hidden">
+      <h2 id="home-weekly-title">이번 주 체질 가이드</h2>
+      <p id="home-weekly-preview"></p>
+      <button class="btn-secondary" id="btn-go-weekly">이번 주 가이드 보기</button>
+    </div>
+
     <div class="section-title">최근 가이드</div>
     <div id="home-guide-list" class="guide-list"></div>
+  </div>
+</div>
+
+<!-- 주간 가이드 + 코치 채팅 -->
+<div id="scr-weekly" class="screen">
+  <header class="topbar">
+    <button class="icon-btn" id="btn-weekly-back">뒤로</button>
+    <span class="topbar-title">이번 주 가이드</span>
+    <span></span>
+  </header>
+  <div class="content">
+    <div class="card">
+      <div class="ctype-badge" id="weekly-ctype-badge">-</div>
+      <h2 id="weekly-tip-title"></h2>
+      <p id="weekly-tip-body"></p>
+    </div>
+
+    <div class="section-title">궁금한 거 물어보세요</div>
+    <div class="card">
+      <div id="chat-log" class="chat-log"></div>
+      <div id="chat-input-row" class="row-2">
+        <input type="text" id="chat-input" placeholder="예: 요즘 소화가 안 되는데 뭘 먹어야 할까요?">
+        <button class="btn-primary chat-send" id="btn-chat-send">전송</button>
+      </div>
+      <div id="chat-limit-note" class="hint hidden"></div>
+    </div>
   </div>
 </div>
 

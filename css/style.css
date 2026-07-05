@@ -250,6 +250,38 @@ select {
   background: #fafaf7;
 }
 
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.chat-msg {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 85%;
+  white-space: pre-wrap;
+}
+.chat-msg.user {
+  align-self: flex-end;
+  background: var(--green);
+  color: #fff;
+}
+.chat-msg.assistant {
+  align-self: flex-start;
+  background: var(--green-light);
+  color: var(--text);
+}
+.chat-send {
+  width: auto;
+  margin-top: 0;
+  padding: 12px 18px;
+}
+
 .myinfo-row {
   display: flex;
   justify-content: space-between;
